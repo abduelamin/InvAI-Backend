@@ -50,8 +50,44 @@ app.post("/api/addproduct", async (req, res) => {
     [product_name, strength, form, reorder_threshold, supplier_lead_time]
   );
 
-  console.log(newProduct);
-  //   res.status(201).json(newProduct)
+  res.status(201).json(newProduct);
+});
+
+app.post("/api/addbatch", async (req, res) => {
+  const { product_name, strength, batch_number, current_stock, expiry_date } =
+    req.body;
+
+  if (!product_name || !strength)
+    return res.status(400).json("Missing product name or strength");
+
+  try {
+    const productID = await pool.query(
+      "SELECT product_id, strength FROM product_inventory WHERE product_name = $1 AND strength = $2",
+      [product_name, strength]
+    );
+    if (productID.rows.length === 0)
+      return res
+        .status(404)
+        .json(
+          "Product do not exist in the database. Please add new product before creating a batch for it."
+        );
+
+    const doesBatchNumberExist = await pool.query(
+      "SELECT * FROM product_details WHERE batch_number = $1",
+      [batch_number]
+    );
+    if (doesBatchNumberExist.rows.length > 0)
+      return res.status(400).json({ message: "Batch Number already exists" });
+
+    const newBatch = await pool.query(
+      "INSERT INTO product_details (product_id, batch_number, current_stock, expiry_date) VALUES ($1, $2, $3, $4) RETURNING *",
+      [productID.rows[0].product_id, batch_number, current_stock, expiry_date]
+    );
+
+    res.status(201).json(newBatch);
+  } catch (error) {
+    console.log(error);
+  }
 });
 
 app.listen(8080, (req, res) => {
