@@ -90,6 +90,46 @@ app.post("/api/addbatch", async (req, res) => {
   }
 });
 
+app.post("/api/editstock", async (req, res) => {
+  const { batchNumber, dateUsed, quantity } = req.body;
+
+  try {
+    const selectedBatch = await pool.query(
+      "SELECT * FROM product_details WHERE batch_number = $1",
+      [batchNumber]
+    );
+    if (selectedBatch.rows.length < 0)
+      return res.status(400).json({ message: `${batchNumber} does not exist` });
+
+    const { batch_id, product_id, current_stock } = selectedBatch.rows[0];
+
+    const addToUsageLog = await pool.query(
+      "INSERT INTO usage_log (batch_id, product_id, date, quantity_used) VALUES ($1, $2, $3, $4) RETURNING *",
+      [batch_id, product_id, dateUsed, quantity]
+    );
+
+    const newQuantityOfStock = current_stock - quantity;
+    console.log("New stock level:", newQuantityOfStock);
+
+    // Double check because maybe the backend or psql number for quanity is saved as a string hence not strictly equal
+    if (addToUsageLog.rows[0].quantity_used === quantity) {
+      const updateBatchDetails = await pool.query(
+        "UPDATE product_details SET current_stock = $1 WHERE batch_id = $2 AND product_id = $3 RETURNING *",
+        [newQuantityOfStock, batch_id, product_id]
+      );
+      res.status(200).json(updateBatchDetails);
+    }
+  } catch (error) {
+    console.log("issue with editing batch endpoint:", error);
+  }
+});
+
 app.listen(8080, (req, res) => {
   console.log("Server is running on PORT 8080");
 });
+
+/* BUGS:
+
+* FE has an issue whereby i cat input numbers in decimal places e.g. 12.8 or 0.12 or 0.01 - it only takes whole numbers which is not good
+
+*/
