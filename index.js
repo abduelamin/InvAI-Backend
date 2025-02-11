@@ -124,6 +124,18 @@ app.post("/api/editstock", async (req, res) => {
   }
 });
 
+app.get("/api/batchdetails", async (req, res) => {
+  try {
+    const batchDetails = await pool.query(
+      "SELECT pi.product_name, pi.strength, pi.reorder_threshold, pi.supplier_lead_time, pd.batch_id, pd.batch_number, pd.current_stock, pd.expiry_date FROM product_details pd JOIN product_inventory pi ON pd.product_id = pi.product_id"
+    );
+    res.status(200).json(batchDetails.rows);
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ error: `${error}` });
+  }
+});
+
 app.listen(8080, (req, res) => {
   console.log("Server is running on PORT 8080");
 });

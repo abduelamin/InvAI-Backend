@@ -1,6 +1,7 @@
 CREATE DATABASE pharmainventory;
 
 
+
 CREATE TABLE product_inventory (  -- static product info
     product_id SERIAL PRIMARY KEY,
     product_name VARCHAR(255) NOT NULL,
@@ -11,13 +12,14 @@ CREATE TABLE product_inventory (  -- static product info
     CONSTRAINT unique_product UNIQUE (product_name, strength, form)
 );
 
-
+-- product_details table needs updating to have intial stock amount too otherwise i cant use it to show stock capacity percentage which is needed for various things esp dashboard and forcasting.
 CREATE TABLE product_details (  -- dynamic product info. for each new product theres new batch number, expiry but the name and stength the same, hence why this table is needed to handle the changing aspects of each product.
     batch_id SERIAL PRIMARY KEY,
     product_id INT NOT NULL,
     batch_number VARCHAR(100) NOT NULL UNIQUE,
     current_stock INT NOT NULL,
     expiry_date DATE NOT NULL,
+    initial_stock INT NOT NULL, 
     CONSTRAINT fk_product
       FOREIGN KEY (product_id)
       REFERENCES product_inventory (product_id)
