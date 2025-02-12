@@ -7,6 +7,7 @@ import { PromptTemplate } from "@langchain/core/prompts";
 import { ChatOpenAI } from "@langchain/openai";
 import pool from "./db.js";
 import cors from "cors";
+import aiRoutes from "./Routes/ai.js";
 
 dotenv.config();
 
@@ -124,6 +125,7 @@ app.post("/api/editstock", async (req, res) => {
   }
 });
 
+// This route is for checking expirty/capactiy anf forcasting
 app.get("/api/batchdetails", async (req, res) => {
   try {
     const batchDetails = await pool.query(
@@ -131,10 +133,11 @@ app.get("/api/batchdetails", async (req, res) => {
     );
     res.status(200).json(batchDetails.rows);
   } catch (error) {
-    console.log(error);
     res.status(500).json({ error: `${error}` });
   }
 });
+
+app.use("/api/ai", aiRoutes);
 
 app.listen(8080, (req, res) => {
   console.log("Server is running on PORT 8080");

@@ -19,7 +19,7 @@ CREATE TABLE product_details (  -- dynamic product info. for each new product th
     batch_number VARCHAR(100) NOT NULL UNIQUE,
     current_stock INT NOT NULL,
     expiry_date DATE NOT NULL,
-    initial_stock INT NOT NULL, 
+    initial_stock INT NOT NULL
     CONSTRAINT fk_product
       FOREIGN KEY (product_id)
       REFERENCES product_inventory (product_id)
@@ -73,3 +73,20 @@ CREATE TABLE usage_log (
 --SELECT product_id, 'BATCH-003', 120, '2025-02-01'
 --FROM product;
 --What this does: The WITH clause selects the product_id for Sertraline 5mg/5ml.The INSERT INTO product_details statement adds a new batch (BATCH-003) with 120 units in stock and an expiry date of 2025-02-01. The product_id is dynamically fetched from the product_inventory table based on the product name, strength, and form.
+
+
+
+CREATE VIEW stock_forecast AS
+SELECT 
+    pi.product_name,
+    pi.strength,
+    pi.form,
+    pd.batch_number,
+    pd.current_stock,
+    (SELECT COALESCE(SUM(ul.quantity_used), 0) FROM usage_log ul WHERE ul.batch_id = pd.batch_id) AS total_usage,
+    (pd.current_stock / NULLIF((SELECT AVG(ul.quantity_used) 
+        FROM usage_log ul WHERE ul.batch_id = pd.batch_id), 0)) AS estimated_days_until_stockout,
+    pi.reorder_threshold,
+    pi.supplier_lead_time
+FROM product_details pd
+JOIN product_inventory pi ON pd.product_id = pi.product_id;
