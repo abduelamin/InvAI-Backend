@@ -10,6 +10,12 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // Add rate limitng
 router.get("/forecast", async (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+
   try {
     const usageData = await pool.query(
       "SELECT ul.usageLog_id, ul.batch_id, ul.product_id, ul.date, ul.quantity_used, pd.batch_number, pd.current_stock,  pd.expiry_date, pd.initial_stock, pi.product_name, pi.strength, pi.reorder_threshold, pi.supplier_lead_time FROM usage_log ul JOIN product_details pd ON ul.batch_id = pd.batch_id  JOIN product_inventory pi ON ul.product_id = pi.product_id"
@@ -68,7 +74,7 @@ router.get("/forecast", async (req, res) => {
       }
     );
 
-    const response = await openai.chat.completions.create({
+    const stream = await openai.chat.completions.create({
       messages: [
         {
           role: "system",
@@ -82,14 +88,25 @@ router.get("/forecast", async (req, res) => {
           )}`,
         },
       ],
+      stream: true,
       model: "gpt-4o-mini",
     });
 
-    res.status(2002).json({
-      aiSummary: response.choices[0].message.content,
-    });
+    // Stream response
+    for await (const chunk of stream) {
+      const token = chunk.choices[0].delta?.content;
+      if (token) {
+        res.write(`data: ${token}\n\n`);
+        if (res.flush) res.flush();
+      }
+    }
+
+    res.write("data: [DONE]\n\n");
+    res.end();
   } catch (error) {
-    console.log(error);
+    console.error("Error:", error.message);
+    res.write(`data: Error: ${error.message}\n\n`);
+    res.end();
   }
 });
 

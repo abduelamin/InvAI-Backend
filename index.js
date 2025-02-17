@@ -8,12 +8,27 @@ import { ChatOpenAI } from "@langchain/openai";
 import pool from "./db.js";
 import cors from "cors";
 import aiRoutes from "./Routes/ai.js";
+import compression from "compression";
 
 dotenv.config();
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+app.use(
+  compression({
+    // Important: Disable compression for SSE
+    filter: (req, res) => {
+      if (
+        req.headers.accept &&
+        req.headers.accept.includes("text/event-stream")
+      ) {
+        return false;
+      }
+      return compression.filter(req, res);
+    },
+  })
+);
 
 app.use(
   cors({
