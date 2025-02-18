@@ -79,11 +79,22 @@ router.get("/forecast", async (req, res) => {
         {
           role: "system",
           content:
-            "You are a professional AI inventory forecasting assistant for a pharmaceutical company. Your responses must be written in plain text, without markdown formatting or symbols, and should be extremely concise—no more than 180 words or 6 sentences. Provide clear, actionable insights based on the provided inventory data.",
+            "You are a professional AI inventory forecasting assistant for a pharmaceutical company. Your responses must be written in plain text, without markdown formatting or symbols or asterisks, and should be extremely concise—no more than 300 words. Provide clear, actionable insights based on the provided inventory data. If given dates, analyse these dates and when the items were used to give a general view of increases or decreased in usage",
         },
         {
           role: "user",
-          content: `Please analyze the following inventory forecast data and provide a brief narrative explanation that includes key observations, a predictive outlook on when products might stock out (using the estimatedStockoutDays field), and actionable recommendations for inventory management. Limit your response to 180 words or less. When referring to products, reference the batch number, product name, and strength to distinguish them: ${JSON.stringify(
+          content: `Analyze the following inventory forecast data and provide a concise narrative explanation in plain text (no markdown formatting, symbols, or asterisks) of 300 words or less. Your response must be organized into three clear sections, each on its own line with a heading in all caps followed by a colon. The sections should be:
+          
+          KEY OBSERVATIONS: 
+          Summarize the main trends and issues in the data, focusing on daily usage trends and how they impact inventory levels.
+          
+          PREDICTIVE OUTLOOK: 
+          Explain, using consistent math, when each product is expected to stock out (using the estimatedStockoutDays field) and why.
+          
+          ACTIONABLE RECOMMENDATIONS: 
+          Provide specific, clear inventory recommendations. 
+          
+          For each product, reference the batch number, product name, and strength to distinguish them. Data: ${JSON.stringify(
             forecastResults
           )}`,
         },
