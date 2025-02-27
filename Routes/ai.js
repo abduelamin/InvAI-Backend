@@ -3,12 +3,13 @@ import pool from "../db.js"; // PostgreSQL connection
 import OpenAI from "openai";
 import dotenv from "dotenv";
 import cron from "node-cron";
+import rateLimit from "express-rate-limit";
+
 dotenv.config();
 const router = express.Router();
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// Helper functions NOT IN ROUTES - do not place them in routes ima move them to utils.
 async function takeSnapshot(type) {
   try {
     const { rows } = await pool.query(`
@@ -114,7 +115,7 @@ async function generateWeeklyReport() {
       }
     });
 
-    // Finally create the report object
+    // create report object
     const report = {
       period: {
         start: mondaySnap.snapshot_date,
@@ -255,7 +256,7 @@ router.get("/forecast", async (req, res) => {
   }
 });
 
-// Weekly report endpoint
+// Weekly report endpoint - testing purposes only to ensure im getting the correct data.
 router.get("/report", async (req, res) => {
   try {
     const report = await generateWeeklyReport();
@@ -266,7 +267,17 @@ router.get("/report", async (req, res) => {
   }
 });
 
-router.get("/weekly-report", async (req, res) => {
+const limiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 4,
+  message: {
+    error: "Too many requests to AI, please try again after 10 minutes",
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+router.get("/weekly-report", limiter, async (req, res) => {
   try {
     const report = await generateWeeklyReport();
     const prompt = `

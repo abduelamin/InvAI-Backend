@@ -9,6 +9,7 @@ import pool from "./db.js";
 import cors from "cors";
 import aiRoutes from "./Routes/ai.js";
 import compression from "compression";
+import rateLimit from "express-rate-limit";
 
 dotenv.config();
 
@@ -38,7 +39,20 @@ app.use(
   })
 );
 
-// routes
+// Rate limiting this has been moved to specifc route in ai that doesnt use streaming. stresming seems harder to integrate rate limitng with so i need to learn how to do it.//
+
+// const limiter = rateLimit({
+//   windowMs: 10 * 60 * 1000,
+//   max: 4,
+//   message: {
+//     error: "Too many requests to AI, please try again after 10 minutes",
+//   },
+//   standardHeaders: true,
+//   legacyHeaders: false,
+// });
+app.set("trust proxy", 1);
+
+/* ROUTES: */
 
 // Displaying Inventory
 app.get("/api/stockoverview", async (req, res) => {
@@ -157,7 +171,6 @@ app.use("/api/ai", aiRoutes);
 app.listen(8080, (req, res) => {
   console.log("Server is running on PORT 8080");
 });
-
 /* BUGS:
 
 * FE has an issue whereby i cat input numbers in decimal places e.g. 12.8 or 0.12 or 0.01 - it only takes whole numbers which is not good
