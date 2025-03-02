@@ -17,14 +17,12 @@ const app = express();
 
 app.use(
   cors({
-    origin:
-      process.env.NODE_ENV === "production"
-        ? "https://inv-ai.vercel.app"
-        : "http://localhost:3000",
+    origin: "https://inv-ai.vercel.app",
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE"],
   })
 );
+console.log("Environment:", process.env.NODE_ENV);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
