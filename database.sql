@@ -98,12 +98,3 @@ CREATE TABLE inventory_snapshot (
   snapshot_type VARCHAR(20) NOT NULL, -- monday or sunday
   snapshot_data JSONB NOT NULL
 );
-
-CREATE INDEX idx_snapshot_dates ON inventory_snapshot (snapshot_date);
-CREATE INDEX idx_usage_dates ON usage_log (date);
-
-CREATE TABLE reports (
-  report_id SERIAL PRIMARY KEY,
-  report_date TIMESTAMP NOT NULL DEFAULT NOW(),
-  report_data JSONB NOT NULL
-);
