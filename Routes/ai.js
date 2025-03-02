@@ -4,6 +4,7 @@ import OpenAI from "openai";
 import dotenv from "dotenv";
 import cron from "node-cron";
 import rateLimit from "express-rate-limit";
+import { createClient } from "@supabase/supabase-js";
 
 dotenv.config();
 const router = express.Router();
@@ -494,6 +495,228 @@ Data: ${JSON.stringify(report, null, 2)}
 //         ),
 //       },
 //       note: "Varied usage patterns: Paracetamol (20-40/day), Ibuprofen (15-30/day), etc.",
+//     });
+//   } catch (error) {
+//     console.error("Simulation error:", error);
+//     res.status(500).json({
+//       error: "Simulation failed",
+//       details: error.message,
+//     });
+//   }
+// });
+
+// subabase simulaton:
+
+// const supabase = createClient(
+//   process.env.SUPABASE_URL,
+//   process.env.SUPABASE_KEY
+// );
+// router.post("/simulate-2025-data", async (req, res) => {
+//   try {
+//     // Clear existing data
+//     await supabase.from("usage_log").delete();
+//     await supabase.from("inventory_snapshot").delete();
+//     await supabase.from("product_details").delete();
+//     await supabase.from("product_inventory").delete();
+
+//     // Create 7 core pharmaceutical products with correct conflict keys
+//     const { data: products, error: productError } = await supabase
+//       .from("product_inventory")
+//       .upsert(
+//         [
+//           {
+//             product_name: "Paracetamol",
+//             strength: "500mg",
+//             form: "Tablet",
+//             reorder_threshold: 150,
+//             supplier_lead_time: 14,
+//           },
+//           {
+//             product_name: "Ibuprofen",
+//             strength: "200mg",
+//             form: "Tablet",
+//             reorder_threshold: 200,
+//             supplier_lead_time: 21,
+//           },
+//           {
+//             product_name: "Omeprazole",
+//             strength: "20mg",
+//             form: "Capsule",
+//             reorder_threshold: 100,
+//             supplier_lead_time: 28,
+//           },
+//           {
+//             product_name: "Amoxicillin",
+//             strength: "500mg",
+//             form: "Capsule",
+//             reorder_threshold: 180,
+//             supplier_lead_time: 35,
+//           },
+//           {
+//             product_name: "Cetirizine",
+//             strength: "10mg",
+//             form: "Tablet",
+//             reorder_threshold: 120,
+//             supplier_lead_time: 14,
+//           },
+//           {
+//             product_name: "Loratadine",
+//             strength: "10mg",
+//             form: "Tablet",
+//             reorder_threshold: 150,
+//             supplier_lead_time: 14,
+//           },
+//           {
+//             product_name: "Aspirin",
+//             strength: "81mg",
+//             form: "Tablet",
+//             reorder_threshold: 250,
+//             supplier_lead_time: 10,
+//           },
+//         ],
+//         { onConflict: ["product_name", "strength", "form"] }
+//       )
+//       .select();
+
+//     if (productError) {
+//       throw new Error("Error inserting products: " + productError.message);
+//     }
+
+//     // Create batches with staggered expiry dates and attach usage_pattern in memory
+//     const batchData = products
+//       .map((product) => {
+//         const baseStock = product.product_name === "Aspirin" ? 2000 : 1500;
+//         return [
+//           {
+//             product_id: product.product_id,
+//             batch_number: `BATCH-${product.product_id}-SPRING25`,
+//             initial_stock: baseStock,
+//             current_stock: baseStock,
+//             expiry_date: new Date("2025-05-15"),
+//             usage_pattern: {
+//               min: product.product_name === "Aspirin" ? 30 : 15,
+//               max: product.product_name === "Aspirin" ? 50 : 35,
+//             },
+//           },
+//           {
+//             product_id: product.product_id,
+//             batch_number: `BATCH-${product.product_id}-SUMMER25`,
+//             initial_stock: baseStock,
+//             current_stock: baseStock,
+//             expiry_date: new Date("2025-07-31"),
+//             usage_pattern: {
+//               min: product.product_name === "Aspirin" ? 25 : 10,
+//               max: product.product_name === "Aspirin" ? 40 : 30,
+//             },
+//           },
+//         ];
+//       })
+//       .flat();
+
+//     // Prepare data for insertion by removing usage_pattern (it is not a column in the table)
+//     const batchInsertData = batchData.map(({ usage_pattern, ...rest }) => rest);
+
+//     // Insert batches into Supabase and return the inserted rows
+//     const { data: batches, error: batchError } = await supabase
+//       .from("product_details")
+//       .upsert(batchInsertData, { onConflict: ["batch_number"] })
+//       .select();
+
+//     if (batchError) {
+//       throw new Error("Error inserting batches: " + batchError.message);
+//     }
+
+//     // Attach the usage_pattern back to the inserted batches (using batch_number as a key)
+//     const batchesWithUsage = batches.map((dbBatch) => {
+//       const original = batchData.find(
+//         (batch) => batch.batch_number === dbBatch.batch_number
+//       );
+//       return { ...dbBatch, usage_pattern: original.usage_pattern };
+//     });
+
+//     // Generate usage data (Feb 22 - July 31, 2025)
+//     const startDate = new Date("2025-02-22");
+//     const endDate = new Date("2025-07-31");
+//     let currentDate = new Date(startDate);
+
+//     while (currentDate <= endDate) {
+//       // Skip weekends (Saturday = 6, Sunday = 0)
+//       if (currentDate.getDay() !== 0 && currentDate.getDay() !== 6) {
+//         await Promise.all(
+//           batchesWithUsage.map(async (batch) => {
+//             const dailyUsage = Math.floor(
+//               Math.random() *
+//                 (batch.usage_pattern.max - batch.usage_pattern.min) +
+//                 batch.usage_pattern.min
+//             );
+
+//             const { data: productDetails, error: detailError } = await supabase
+//               .from("product_details")
+//               .select("current_stock")
+//               .eq("batch_id", batch.batch_id)
+//               .single();
+
+//             if (detailError) {
+//               console.error("Error fetching product details:", detailError);
+//               return;
+//             }
+
+//             const currentStock = productDetails?.current_stock || 0;
+
+//             if (currentStock > 0) {
+//               const used = Math.min(dailyUsage, currentStock);
+
+//               // Insert usage log entry
+//               const { error: usageError } = await supabase
+//                 .from("usage_log")
+//                 .insert([
+//                   {
+//                     batch_id: batch.batch_id,
+//                     product_id: batch.product_id,
+//                     date: currentDate,
+//                     quantity_used: used,
+//                   },
+//                 ]);
+
+//               if (usageError) {
+//                 console.error("Error inserting usage log:", usageError);
+//               }
+
+//               // Update current stock in product_details
+//               const { error: updateError } = await supabase
+//                 .from("product_details")
+//                 .update({ current_stock: Math.max(0, currentStock - used) })
+//                 .eq("batch_id", batch.batch_id);
+
+//               if (updateError) {
+//                 console.error("Error updating current stock:", updateError);
+//               }
+//             }
+//           })
+//         );
+//       }
+//       currentDate.setDate(currentDate.getDate() + 1);
+//     }
+
+//     // Create bi-weekly snapshots (every other Monday)
+//     let snapshotDate = new Date("2025-02-24");
+//     while (snapshotDate <= endDate) {
+//       await takeSnapshot(snapshotDate);
+//       snapshotDate.setDate(snapshotDate.getDate() + 14);
+//     }
+
+//     res.json({
+//       message: "2025 Simulation Complete",
+//       stats: {
+//         products: products.length,
+//         batches: batchesWithUsage.length,
+//         usage_days: 22, // Static placeholder value
+//         total_usage: batchesWithUsage.reduce(
+//           (sum, b) => sum + (b.initial_stock - b.initial_stock * 0.3),
+//           0
+//         ),
+//       },
+//       note: "Optimized for demo: 7 products, 14 batches, ~1000 total records",
 //     });
 //   } catch (error) {
 //     console.error("Simulation error:", error);

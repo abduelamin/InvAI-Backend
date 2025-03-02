@@ -14,6 +14,18 @@ import rateLimit from "express-rate-limit";
 dotenv.config();
 
 const app = express();
+
+app.use(
+  cors({
+    origin:
+      process.env.NODE_ENV === "production"
+        ? "https://inv-ai.vercel.app"
+        : "http://localhost:3000",
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE"],
+  })
+);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(
@@ -28,17 +40,6 @@ app.use(
       }
       return compression.filter(req, res);
     },
-  })
-);
-
-app.use(
-  cors({
-    origin:
-      process.env.NODE_ENV === "production"
-        ? "https://inv-ai.vercel.app"
-        : "http://localhost:3000",
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE"],
   })
 );
 
