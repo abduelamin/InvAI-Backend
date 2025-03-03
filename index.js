@@ -19,7 +19,6 @@ app.use(
   cors({
     origin: "https://inv-ai.vercel.app",
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE"],
   })
 );
 console.log("Environment:", process.env.NODE_ENV);
@@ -170,9 +169,12 @@ app.get("/api/batchdetails", async (req, res) => {
 
 app.use("/api/ai", aiRoutes);
 
-app.listen(8080, (req, res) => {
-  console.log("Server is running on PORT 8080");
-});
+// app.listen(8080, (req, res) => {
+//   console.log("Server is running on PORT 8080");
+// });
+
+export default app;
+
 /* BUGS:
 
 * FE has an issue whereby i cat input numbers in decimal places e.g. 12.8 or 0.12 or 0.01 - it only takes whole numbers which is not good
