@@ -15,7 +15,6 @@ dotenv.config();
 
 const app = express();
 
-// const allowedOrigins = ["https://inv-ai.vercel.app", "http://localhost:3000"];
 app.use(
   cors({
     origin: "https://inv-ai.vercel.app",
@@ -176,9 +175,9 @@ app.get("/api/batchdetails", async (req, res) => {
 
 app.use("/api/ai", aiRoutes);
 
-// app.listen(8080, (req, res) => {
-//   console.log("Server is running on PORT 8080");
-// });
+app.listen(8080, (req, res) => {
+  console.log("Server is running on PORT 8080");
+});
 
 export default app;
 

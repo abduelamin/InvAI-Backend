@@ -9,52 +9,59 @@ import { createClient } from "@supabase/supabase-js";
 dotenv.config();
 const router = express.Router();
 
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY
+);
+
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// async function takeSnapshot(type) {
-//   try {
-//     const { rows } = await pool.query(`
-//         SELECT
-//           pd.*,
-//           pi.product_name,
-//           pi.strength,
-//           pi.form
-//         FROM product_details pd
-//         JOIN product_inventory pi ON pd.product_id = pi.product_id
-//       `);
-
-//     await pool.query(
-//       "INSERT INTO inventory_snapshot (snapshot_type, snapshot_data) VALUES ($1, $2)",
-//       [type, JSON.stringify(rows)]
-//     );
-//     console.log(`Snapshot taken for ${type}`);
-//   } catch (error) {
-//     console.error("Snapshot error:", error);
-//   }
-// }
 async function takeSnapshot(type) {
   try {
-    const { data: rows, error } = await supabase
-      .from("product_details_view")
-      .select("*");
+    const { rows } = await pool.query(`
+        SELECT
+          pd.*,
+          pi.product_name,
+          pi.strength,
+          pi.form
+        FROM product_details pd
+        JOIN product_inventory pi ON pd.product_id = pi.product_id
+      `);
 
-    if (error) throw error;
-
-    const { error: insertError } = await supabase
-      .from("inventory_snapshot")
-      .insert([
-        {
-          snapshot_type: type,
-          snapshot_data: rows,
-        },
-      ]);
-
-    if (insertError) throw insertError;
-    console.log(`Supabase snapshot taken for ${type}`);
+    await pool.query(
+      "INSERT INTO inventory_snapshot (snapshot_type, snapshot_data) VALUES ($1, $2)",
+      [type, JSON.stringify(rows)]
+    );
+    console.log(`Snapshot taken for ${type}`);
   } catch (error) {
-    console.error("Supabase snapshot error:", error);
+    console.error("Snapshot error:", error);
   }
 }
+
+// This is for supabase snapshot creation
+// async function takeSnapshot(type) {
+//   try {
+//     const { data: rows, error } = await supabase
+//       .from("product_details_view")
+//       .select("*");
+
+//     if (error) throw error;
+
+//     const { error: insertError } = await supabase
+//       .from("inventory_snapshot")
+//       .insert([
+//         {
+//           snapshot_type: type,
+//           snapshot_data: rows,
+//         },
+//       ]);
+
+//     if (insertError) throw insertError;
+//     console.log(`Supabase snapshot taken for ${type}`);
+//   } catch (error) {
+//     console.error("Supabase snapshot error:", error);
+//   }
+// }
 
 async function generateWeeklyReport() {
   try {
@@ -179,6 +186,19 @@ router.get("/forecast", async (req, res) => {
   );
   res.setHeader("Access-Control-Allow-Credentials", "true");
 
+  // heartbeat to prevent connection timeout
+  const heartbeat = setInterval(() => {
+    res.write(":keep-alive\n\n");
+  }, 15000);
+
+  // Handle client disconnect
+  req.on("close", () => {
+    clearInterval(heartbeat);
+    if (!res.writableEnded) {
+      res.end();
+    }
+  });
+
   try {
     const usageData = await pool.query(
       "SELECT ul.usageLog_id, ul.batch_id, ul.product_id, ul.date, ul.quantity_used, pd.batch_number, pd.current_stock,  pd.expiry_date, pd.initial_stock, pi.product_name, pi.strength, pi.reorder_threshold, pi.supplier_lead_time FROM usage_log ul JOIN product_details pd ON ul.batch_id = pd.batch_id  JOIN product_inventory pi ON ul.product_id = pi.product_id"
@@ -267,20 +287,41 @@ router.get("/forecast", async (req, res) => {
       model: "gpt-4o-mini",
     });
 
+    // Handle stream errors
+    stream.on("error", (error) => {
+      console.error("Stream error:", error);
+      res.write(`data: [ERROR] ${error.message}\n\n`);
+      res.end();
+    });
+
     // Stream response
     for await (const chunk of stream) {
+      if (!res.writable) {
+        console.log("Client disconnected, aborting stream");
+        stream.controller.abort();
+        break;
+      }
+
       const token = chunk.choices[0].delta?.content;
       if (token) {
-        res.write(`data: ${token}\n\n`);
-        if (res.flush) res.flush();
+        try {
+          res.write(`data: ${token.replace(/\n/g, " ")}\n\n`);
+          if (res.flush) res.flush();
+        } catch (writeError) {
+          console.log("Write error:", writeError);
+          break;
+        }
       }
     }
 
+    // Cleanup
+    clearInterval(heartbeat);
     res.write("data: [DONE]\n\n");
     res.end();
   } catch (error) {
     console.error("Error:", error.message);
-    res.write(`data: Error: ${error.message}\n\n`);
+    clearInterval(heartbeat);
+    res.write(`data: [ERROR] ${error.message}\n\n`);
     res.end();
   }
 });
@@ -530,10 +571,6 @@ Data: ${JSON.stringify(report, null, 2)}
 
 // subabase simulaton:
 
-// const supabase = createClient(
-//   process.env.SUPABASE_URL,
-//   process.env.SUPABASE_KEY
-// );
 // router.post("/simulate-2025-data", async (req, res) => {
 //   try {
 //     // Clear existing data
@@ -705,12 +742,18 @@ Data: ${JSON.stringify(report, null, 2)}
 //     }
 
 //     // Create bi-weekly snapshots
-//     let snapshotDate = new Date("2025-02-24");
-//     while (snapshotDate <= endDate) {
-//       await takeSnapshot(
-//         `biweekly-${snapshotDate.toISOString().split("T")[0]}`
-//       );
-//       snapshotDate.setDate(snapshotDate.getDate() + 14);
+//     let snapshotDate = new Date("2025-02-23"); // last Monday in Feb
+//     while (snapshotDate < endDate) {
+//       // Monday snapshot
+//       await takeSnapshot("monday");
+
+//       // Sunday snapshot
+//       const sundayDate = new Date(snapshotDate);
+//       sundayDate.setDate(snapshotDate.getDate() + 6);
+//       sundayDate.setHours(22, 0, 0);
+//       await takeSnapshot("sunday");
+
+//       snapshotDate.setDate(snapshotDate.getDate() + 7);
 //     }
 
 //     res.json({
