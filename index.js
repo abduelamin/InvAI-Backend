@@ -15,10 +15,10 @@ dotenv.config();
 
 const app = express();
 
-const allowedOrigins = ["https://inv-ai.vercel.app", "http://localhost:3000"];
+// const allowedOrigins = ["https://inv-ai.vercel.app", "http://localhost:3000"];
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: "https://inv-ai.vercel.app",
     credentials: true,
   })
 );
