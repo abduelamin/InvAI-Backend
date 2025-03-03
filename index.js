@@ -15,9 +15,10 @@ dotenv.config();
 
 const app = express();
 
+const allowedOrigins = ["https://inv-ai.vercel.app", "http://localhost:3000"];
 app.use(
   cors({
-    origin: "https://inv-ai.vercel.app",
+    origin: allowedOrigins,
     credentials: true,
   })
 );
@@ -111,8 +112,14 @@ app.post("/api/addbatch", async (req, res) => {
       return res.status(400).json({ message: "Batch Number already exists" });
 
     const newBatch = await pool.query(
-      "INSERT INTO product_details (product_id, batch_number, current_stock, expiry_date) VALUES ($1, $2, $3, $4) RETURNING *",
-      [productID.rows[0].product_id, batch_number, current_stock, expiry_date]
+      "INSERT INTO product_details (product_id, batch_number, current_stock, initial_stock, expiry_date) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+      [
+        productID.rows[0].product_id,
+        batch_number,
+        current_stock,
+        current_stock,
+        expiry_date,
+      ]
     );
 
     res.status(201).json(newBatch);
@@ -169,9 +176,9 @@ app.get("/api/batchdetails", async (req, res) => {
 
 app.use("/api/ai", aiRoutes);
 
-// app.listen(8080, (req, res) => {
-//   console.log("Server is running on PORT 8080");
-// });
+app.listen(8080, (req, res) => {
+  console.log("Server is running on PORT 8080");
+});
 
 export default app;
 

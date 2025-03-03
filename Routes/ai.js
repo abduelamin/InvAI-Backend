@@ -11,25 +11,48 @@ const router = express.Router();
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+// async function takeSnapshot(type) {
+//   try {
+//     const { rows } = await pool.query(`
+//         SELECT
+//           pd.*,
+//           pi.product_name,
+//           pi.strength,
+//           pi.form
+//         FROM product_details pd
+//         JOIN product_inventory pi ON pd.product_id = pi.product_id
+//       `);
+
+//     await pool.query(
+//       "INSERT INTO inventory_snapshot (snapshot_type, snapshot_data) VALUES ($1, $2)",
+//       [type, JSON.stringify(rows)]
+//     );
+//     console.log(`Snapshot taken for ${type}`);
+//   } catch (error) {
+//     console.error("Snapshot error:", error);
+//   }
+// }
 async function takeSnapshot(type) {
   try {
-    const { rows } = await pool.query(`
-        SELECT 
-          pd.*, 
-          pi.product_name,
-          pi.strength,
-          pi.form
-        FROM product_details pd
-        JOIN product_inventory pi ON pd.product_id = pi.product_id
-      `);
+    const { data: rows, error } = await supabase
+      .from("product_details_view")
+      .select("*");
 
-    await pool.query(
-      "INSERT INTO inventory_snapshot (snapshot_type, snapshot_data) VALUES ($1, $2)",
-      [type, JSON.stringify(rows)]
-    );
-    console.log(`Snapshot taken for ${type}`);
+    if (error) throw error;
+
+    const { error: insertError } = await supabase
+      .from("inventory_snapshot")
+      .insert([
+        {
+          snapshot_type: type,
+          snapshot_data: rows,
+        },
+      ]);
+
+    if (insertError) throw insertError;
+    console.log(`Supabase snapshot taken for ${type}`);
   } catch (error) {
-    console.error("Snapshot error:", error);
+    console.error("Supabase snapshot error:", error);
   }
 }
 
@@ -519,7 +542,7 @@ Data: ${JSON.stringify(report, null, 2)}
 //     await supabase.from("product_details").delete();
 //     await supabase.from("product_inventory").delete();
 
-//     // Create 7 core pharmaceutical products with correct conflict keys
+//     // Create pharmaceutical products
 //     const { data: products, error: productError } = await supabase
 //       .from("product_inventory")
 //       .upsert(
@@ -546,7 +569,7 @@ Data: ${JSON.stringify(report, null, 2)}
 //             supplier_lead_time: 28,
 //           },
 //           {
-//             product_name: "Amoxicillin",
+//             product_name: "Amoxicillin", // Target for stockout
 //             strength: "500mg",
 //             form: "Capsule",
 //             reorder_threshold: 180,
@@ -578,14 +601,25 @@ Data: ${JSON.stringify(report, null, 2)}
 //       )
 //       .select();
 
-//     if (productError) {
-//       throw new Error("Error inserting products: " + productError.message);
-//     }
+//     if (productError) throw new Error("Product error: " + productError.message);
 
-//     // Create batches with staggered expiry dates and attach usage_pattern in memory
+//     // Create batches with customized stock levels and usage patterns
 //     const batchData = products
 //       .map((product) => {
-//         const baseStock = product.product_name === "Aspirin" ? 2000 : 1500;
+//         // Configure stockout candidate (Amoxicillin)
+//         let baseStock, usagePattern;
+
+//         if (product.product_name === "Amoxicillin") {
+//           baseStock = 800; // Low initial stock
+//           usagePattern = { min: 25, max: 40 }; // High usage
+//         } else if (product.product_name === "Aspirin") {
+//           baseStock = 3000;
+//           usagePattern = { min: 8, max: 12 };
+//         } else {
+//           baseStock = 2500; // Higher stock for others
+//           usagePattern = { min: 2, max: 5 }; // Low usage
+//         }
+
 //         return [
 //           {
 //             product_id: product.product_id,
@@ -593,10 +627,7 @@ Data: ${JSON.stringify(report, null, 2)}
 //             initial_stock: baseStock,
 //             current_stock: baseStock,
 //             expiry_date: new Date("2025-05-15"),
-//             usage_pattern: {
-//               min: product.product_name === "Aspirin" ? 30 : 15,
-//               max: product.product_name === "Aspirin" ? 50 : 35,
-//             },
+//             usage_pattern: usagePattern,
 //           },
 //           {
 //             product_id: product.product_id,
@@ -604,43 +635,35 @@ Data: ${JSON.stringify(report, null, 2)}
 //             initial_stock: baseStock,
 //             current_stock: baseStock,
 //             expiry_date: new Date("2025-07-31"),
-//             usage_pattern: {
-//               min: product.product_name === "Aspirin" ? 25 : 10,
-//               max: product.product_name === "Aspirin" ? 40 : 30,
-//             },
+//             usage_pattern: usagePattern,
 //           },
 //         ];
 //       })
 //       .flat();
 
-//     // Prepare data for insertion by removing usage_pattern (it is not a column in the table)
+//     // Insert batches
 //     const batchInsertData = batchData.map(({ usage_pattern, ...rest }) => rest);
-
-//     // Insert batches into Supabase and return the inserted rows
 //     const { data: batches, error: batchError } = await supabase
 //       .from("product_details")
 //       .upsert(batchInsertData, { onConflict: ["batch_number"] })
 //       .select();
 
-//     if (batchError) {
-//       throw new Error("Error inserting batches: " + batchError.message);
-//     }
+//     if (batchError) throw new Error("Batch error: " + batchError.message);
 
-//     // Attach the usage_pattern back to the inserted batches (using batch_number as a key)
-//     const batchesWithUsage = batches.map((dbBatch) => {
-//       const original = batchData.find(
-//         (batch) => batch.batch_number === dbBatch.batch_number
-//       );
-//       return { ...dbBatch, usage_pattern: original.usage_pattern };
-//     });
+//     // Attach usage patterns
+//     const batchesWithUsage = batches.map((dbBatch) => ({
+//       ...dbBatch,
+//       usage_pattern: batchData.find(
+//         (b) => b.batch_number === dbBatch.batch_number
+//       ).usage_pattern,
+//     }));
 
-//     // Generate usage data (Feb 22 - July 31, 2025)
+//     // Generate usage data
 //     const startDate = new Date("2025-02-22");
 //     const endDate = new Date("2025-07-31");
 //     let currentDate = new Date(startDate);
 
 //     while (currentDate <= endDate) {
-//       // Skip weekends (Saturday = 6, Sunday = 0)
 //       if (currentDate.getDay() !== 0 && currentDate.getDay() !== 6) {
 //         await Promise.all(
 //           batchesWithUsage.map(async (batch) => {
@@ -650,47 +673,30 @@ Data: ${JSON.stringify(report, null, 2)}
 //                 batch.usage_pattern.min
 //             );
 
-//             const { data: productDetails, error: detailError } = await supabase
+//             const { data: productDetails } = await supabase
 //               .from("product_details")
 //               .select("current_stock")
 //               .eq("batch_id", batch.batch_id)
 //               .single();
-
-//             if (detailError) {
-//               console.error("Error fetching product details:", detailError);
-//               return;
-//             }
 
 //             const currentStock = productDetails?.current_stock || 0;
 
 //             if (currentStock > 0) {
 //               const used = Math.min(dailyUsage, currentStock);
 
-//               // Insert usage log entry
-//               const { error: usageError } = await supabase
-//                 .from("usage_log")
-//                 .insert([
-//                   {
-//                     batch_id: batch.batch_id,
-//                     product_id: batch.product_id,
-//                     date: currentDate,
-//                     quantity_used: used,
-//                   },
-//                 ]);
+//               await supabase.from("usage_log").insert([
+//                 {
+//                   batch_id: batch.batch_id,
+//                   product_id: batch.product_id,
+//                   date: currentDate,
+//                   quantity_used: used,
+//                 },
+//               ]);
 
-//               if (usageError) {
-//                 console.error("Error inserting usage log:", usageError);
-//               }
-
-//               // Update current stock in product_details
-//               const { error: updateError } = await supabase
+//               await supabase
 //                 .from("product_details")
 //                 .update({ current_stock: Math.max(0, currentStock - used) })
 //                 .eq("batch_id", batch.batch_id);
-
-//               if (updateError) {
-//                 console.error("Error updating current stock:", updateError);
-//               }
 //             }
 //           })
 //         );
@@ -698,10 +704,12 @@ Data: ${JSON.stringify(report, null, 2)}
 //       currentDate.setDate(currentDate.getDate() + 1);
 //     }
 
-//     // Create bi-weekly snapshots (every other Monday)
+//     // Create bi-weekly snapshots
 //     let snapshotDate = new Date("2025-02-24");
 //     while (snapshotDate <= endDate) {
-//       await takeSnapshot(snapshotDate);
+//       await takeSnapshot(
+//         `biweekly-${snapshotDate.toISOString().split("T")[0]}`
+//       );
 //       snapshotDate.setDate(snapshotDate.getDate() + 14);
 //     }
 
@@ -710,13 +718,13 @@ Data: ${JSON.stringify(report, null, 2)}
 //       stats: {
 //         products: products.length,
 //         batches: batchesWithUsage.length,
-//         usage_days: 22, // Static placeholder value
+//         usage_days: Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24)),
 //         total_usage: batchesWithUsage.reduce(
-//           (sum, b) => sum + (b.initial_stock - b.initial_stock * 0.3),
+//           (sum, b) => sum + (b.initial_stock - b.current_stock),
 //           0
 //         ),
 //       },
-//       note: "Optimized for demo: 7 products, 14 batches, ~1000 total records",
+//       note: "Realistic demo: 1 product out of stock, others maintain inventory",
 //     });
 //   } catch (error) {
 //     console.error("Simulation error:", error);
