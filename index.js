@@ -176,9 +176,9 @@ app.get("/api/batchdetails", async (req, res) => {
 
 app.use("/api/ai", aiRoutes);
 
-app.listen(8080, (req, res) => {
-  console.log("Server is running on PORT 8080");
-});
+// app.listen(8080, (req, res) => {
+//   console.log("Server is running on PORT 8080");
+// });
 
 export default app;
 
