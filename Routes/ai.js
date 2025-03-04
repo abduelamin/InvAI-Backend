@@ -189,7 +189,7 @@ router.get("/forecast", async (req, res) => {
   // heartbeat to prevent connection timeout
   const heartbeat = setInterval(() => {
     res.write(":keep-alive\n\n");
-  }, 1000);
+  }, 2000);
 
   // Handle client disconnect
   req.on("close", () => {
