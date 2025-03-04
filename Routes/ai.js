@@ -189,7 +189,7 @@ router.get("/forecast", async (req, res) => {
   // heartbeat to prevent connection timeout
   const heartbeat = setInterval(() => {
     res.write(":keep-alive\n\n");
-  }, 15000);
+  }, 1000);
 
   // Handle client disconnect
   req.on("close", () => {
@@ -287,30 +287,11 @@ router.get("/forecast", async (req, res) => {
       model: "gpt-4o-mini",
     });
 
-    // Handle stream errors
-    stream.on("error", (error) => {
-      console.error("Stream error:", error);
-      res.write(`data: [ERROR] ${error.message}\n\n`);
-      res.end();
-    });
-
-    // Stream response
     for await (const chunk of stream) {
-      if (!res.writable) {
-        console.log("Client disconnected, aborting stream");
-        stream.controller.abort();
-        break;
-      }
-
       const token = chunk.choices[0].delta?.content;
       if (token) {
-        try {
-          res.write(`data: ${token.replace(/\n/g, " ")}\n\n`);
-          if (res.flush) res.flush();
-        } catch (writeError) {
-          console.log("Write error:", writeError);
-          break;
-        }
+        res.write(`data: ${token}\n\n`);
+        if (res.flush) res.flush();
       }
     }
 
